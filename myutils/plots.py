@@ -1,18 +1,28 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import random
 
 
 
 
 def plot_CIs(
-    CI_list, 
-    n: int = 20, 
+    *,
+    CI_dict: dict, 
+    truth: float,
+    n: int = 5, 
     seed: int = 0, 
-    title: str = "Random Confidence Intervals"):
+    title: str = ""):
     """
-    Plot randomly selected n confidence intervals from a list of dicts.
+    Plot randomly selected n confidence intervals from a dict of lists of dicts.
     Each dict should contain:
+        - "linear": list
+        - "random_forest": list
+        - "kernel": list
+        - "xgboost": list
+        - "neural_net": list
+    Each value is a list of subdicts,
+    where each subdict should contain:
         - "lower": np.ndarray
         - "upper": np.ndarray
         - "covers?": bool
@@ -20,34 +30,60 @@ def plot_CIs(
     Averages bounds if multidimensional.
 
     Parameters:
-    - CI_list: list of dicts with keys "lower", "upper", and "covers?"
+    - CI_dict: dict of lists of dicts
     - n: number of intervals to sample
     - seed: random seed
     - title: plot title
     """
-    if n > len(CI_list):
-        raise ValueError(f"Requested {n} intervals, but only {len(CI_list)} available.")
-
     rng = np.random.default_rng(seed=seed)
-    sampled = rng.sample(CI_list, n)
+    colors = sns.color_palette('pastel', n_colors=len(CI_dict))
+    
+    total_plots = n * len(CI_dict)
+    bar_height = 0.8 
+    y_base = 0
+    
+    plt.figure(dpi=600)
+    plt.figure(figsize=(8, total_plots * 0.25 + 2))  # adjust height for visibility
+    
+    for i, (CI_list_name, CI_list) in enumerate(CI_dict.items()):
+        if n > len(CI_list):
+            raise ValueError(f"Requested {n} intervals, but {CI_list_name} has only {len(CI_list)} available.")
+            
+        sampled = rng.choice(CI_list, n, replace=False)
 
-    avg_lowers = []
-    avg_uppers = []
+        for j, d in enumerate(sampled):
+            lower = np.mean(d["lower"])
+            upper = np.mean(d["upper"])
+            width = upper - lower
+            y = y_base + j
+            
+            plt.broken_barh(
+                [(lower, width)],           # (x_start, width)
+                (y - bar_height / 2, bar_height),  # (y_start, height)
+                facecolors=colors[i],
+                edgecolors='none',
+                label=CI_list_name if j == 0 else None
+            )
 
-    for d in sampled:
-        lower = d["lower"]
-        upper = d["upper"]
-        avg_lowers.append(np.mean(lower))
-        avg_uppers.append(np.mean(upper))
-
-    centers = [(l + u) / 2 for l, u in zip(avg_lowers, avg_uppers)]
-    half_widths = [(u - l) / 2 for l, u in zip(avg_lowers, avg_uppers)]
-
-    plt.errorbar(range(n), centers, yerr=half_widths, fmt='o', capsize=5)
-    plt.xticks(ticks=range(n), labels=[f"CI {i}" for i in range(n)], rotation=45, ha='right')
-    plt.ylabel("Confidence Interval")
+        y_base += n
+        
+    # Add vertical line for truth
+    plt.axvline(
+        x=truth, 
+        color='black', 
+        linestyle='dotted', 
+        linewidth=1.5, 
+        label='Truth'
+    )
+    
+    plt.xlabel("Average Confidence Interval")
     plt.title(title)
-    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.yticks([])  # remove y-axis ticks
+    plt.gca().spines['left'].set_visible(False)  # remove left border
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().spines['top'].set_visible(False)
+    plt.grid(False)
+    plt.legend()
     plt.tight_layout()
     plt.show()
     

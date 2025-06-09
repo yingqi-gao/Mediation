@@ -93,25 +93,14 @@ def _construct_r0_CI(
 def construct_r0_CIs(
     *,
     data_generator_param: DataGeneratorParam,
-    train_data_param: TrainDataParam,
     real_data_param: RealDataParam,
     expanded_data_param: ExpandedDataParam,
-    output_directory_uri: str,
-    r0_learner_name: str, 
-    r0_learner,
+    model_directory_uri: str,
+    r_hat, 
     alpha = 0.05,
     repetitions: int = 500,
     fresh = False
 ) -> dict:
-    
-    r_hat, model_directory_uri = train_model(
-        data_generator_param = data_generator_param, 
-        train_data_param = train_data_param, 
-        which_model = "rhat",
-        output_directory_uri = output_directory_uri,
-        r0_learner_name = r0_learner_name,
-        r0_learner = r0_learner, 
-    )
     
     results_directory_uri = get_results_directory_uri(
         real_data_param = real_data_param,
@@ -175,24 +164,27 @@ if __name__ == '__main__':
     
     OUTPUT_DIRECTORY_URI = "/u/scratch/y/yqg36/Mediation/results"
 
-    
-    
-    ols_r0_CI = construct_r0_CIs(
-        data_generator_param = data_generator_param,
-        train_data_param = train_data_param,
-        real_data_param = real_data_param,
-        expanded_data_param = expanded_data_param,
+    ols_r_hat, ols_model_directory_uri = train_model(
+        data_generator_param = data_generator_param, 
+        train_data_param = train_data_param, 
+        which_model = "rhat",
         output_directory_uri = OUTPUT_DIRECTORY_URI,
         r0_learner_name = "linear", 
         r0_learner = build_learner(model_type='ols'),
     )
-    
-    
-    rf_r0_CI = construct_r0_CIs(
+    ols_r0_CI = construct_r0_CIs(
         data_generator_param = data_generator_param,
-        train_data_param = train_data_param,
         real_data_param = real_data_param,
         expanded_data_param = expanded_data_param,
+        model_directory_uri = ols_model_directory_uri,
+        r_hat = ols_r_hat,
+    )
+    
+    
+    rf_r_hat, rf_model_directory_uri = train_model(
+        data_generator_param = data_generator_param, 
+        train_data_param = train_data_param, 
+        which_model = "rhat",
         output_directory_uri = OUTPUT_DIRECTORY_URI,
         r0_learner_name = "random_forest", 
         r0_learner = build_learner(
@@ -204,35 +196,53 @@ if __name__ == '__main__':
             n_jobs=-1,
         ),
     )
-    
-    
-    krr_r0_CI = construct_r0_CIs(
+    rf_r0_CI = construct_r0_CIs(
         data_generator_param = data_generator_param,
-        train_data_param = train_data_param,
         real_data_param = real_data_param,
         expanded_data_param = expanded_data_param,
-        output_directory_uri = OUTPUT_DIRECTORY_URI,
-        r0_learner_name = "kernel", 
-        r0_learner = build_learner(model_type='krr'), 
+        model_directory_uri = rf_model_directory_uri,
+        r_hat = rf_r_hat,
     )
     
     
-    xgb_r0_CI = construct_r0_CIs(
+    krr_r_hat, krr_model_directory_uri = train_model(
+        data_generator_param = data_generator_param, 
+        train_data_param = train_data_param, 
+        which_model = "rhat",
+        output_directory_uri = OUTPUT_DIRECTORY_URI,
+        r0_learner_name = "kernel", 
+        r0_learner = build_learner(model_type='krr'),
+    )
+    krr_r0_CI = construct_r0_CIs(
         data_generator_param = data_generator_param,
-        train_data_param = train_data_param,
         real_data_param = real_data_param,
         expanded_data_param = expanded_data_param,
+        model_directory_uri = krr_model_directory_uri,
+        r_hat = krr_r_hat
+    )
+    
+    
+    xgb_r_hat, xgb_model_directory_uri = train_model(
+        data_generator_param = data_generator_param, 
+        train_data_param = train_data_param, 
+        which_model = "rhat",
         output_directory_uri = OUTPUT_DIRECTORY_URI,
         r0_learner_name = "xgboost", 
         r0_learner = build_learner(model_type='xgb', output_dim=P),  
     )
-    
-    
-    mlp_r0_CI = construct_r0_CIs(
+    xgb_r0_CI = construct_r0_CIs(
         data_generator_param = data_generator_param,
-        train_data_param = train_data_param,
         real_data_param = real_data_param,
         expanded_data_param = expanded_data_param,
+        model_directory_uri = xgb_model_directory_uri,
+        r_hat = xgb_r_hat
+    )
+    
+    
+    mlp_r_hat, mlp_model_directory_uri = train_model(
+        data_generator_param = data_generator_param, 
+        train_data_param = train_data_param, 
+        which_model = "rhat",
         output_directory_uri = OUTPUT_DIRECTORY_URI,
         r0_learner_name = "neural_net_128x128_1000_64", 
         r0_learner = build_learner(
@@ -243,5 +253,13 @@ if __name__ == '__main__':
             epochs = 1000,
             batch_size = 64
         ),   
+    )
+    mlp_r0_CI = construct_r0_CIs(
+        data_generator_param = data_generator_param,
+        train_data_param = train_data_param,
+        real_data_param = real_data_param,
+        expanded_data_param = expanded_data_param,
+        model_directory_uri = mlp_model_directory_uri,
+        r_hat = mlp_r_hat
     )
     
