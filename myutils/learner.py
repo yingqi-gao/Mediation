@@ -1,202 +1,245 @@
-from mlp import TorchMLP, init_all_weights
-from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.multioutput import MultiOutputRegressor
-from sklearn.kernel_approximation import Nystroem
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler, FunctionTransformer
-from xgboost import XGBRegressor
-from skorch import NeuralNetRegressor
-import torch
 import numpy as np
-from utils import timeit, set_seed
-from functools import partial
+import torch
 
-    
-    
-    
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.kernel_approximation import Nystroem
+from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.metrics import mean_squared_error
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
+
+from skorch import NeuralNetRegressor
+from xgboost import XGBRegressor
+
+from mlp import TorchMLP, init_all_weights
+from utils import set_seed
+
+
 class MyNetRegressor(NeuralNetRegressor):
-    def fit(self, X, y=None, **fit_params):
+    """
+    A wrapper around skorch.NeuralNetRegressor to ensure compatibility
+    with scikit-learn-style regressors.
+
+    - During training (`fit`), it reshapes 1D targets `y` to 2D if needed,
+      which avoids errors from skorch expecting shape (n_samples, n_outputs).
+
+    - During prediction, it squeezes the output back to 1D if the result has shape (n, 1),
+      ensuring consistency with other regressors like LinearRegression or RandomForestRegressor.
+    """
+
+    def fit(self, X: np.ndarray, y: np.ndarray, **fit_params):
         if y.ndim == 1:
             y = y.reshape(-1, 1)
         return super().fit(X, y, **fit_params)
-    
-    def predict(self, X):
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
         y_pred = super().predict(X)
         if y_pred.ndim == 2 and y_pred.shape[1] == 1:
             y_pred = y_pred.ravel()
         return y_pred
-    
-    
-def build_learner(model_type: str, memory=None, **kwargs):
 
-    if model_type == 'ols':
-        return Pipeline([
-            ('scaler', MinMaxScaler()),
-            ('estimator', LinearRegression(**kwargs))
-        ], memory=memory)
 
-    elif model_type == 'rf':
-        output_dim = kwargs.pop('output_dim', 1)
+def wrap_with_pipeline(model, memory=None):
+    return Pipeline([("scaler", MinMaxScaler()), ("estimator", model)], memory=memory)
+
+
+def build_learner(model_type: str, memory=None, **kwargs) -> Pipeline:
+    if model_type == "ols":
+        return wrap_with_pipeline(LinearRegression(**kwargs), memory)
+
+    elif model_type == "rf":
+        output_dim = kwargs.pop("output_dim", 1)
         base_model = RandomForestRegressor(random_state=0, **kwargs)
         model = MultiOutputRegressor(base_model) if output_dim >= 2 else base_model
-        return Pipeline([
-            ('scaler', MinMaxScaler()),
-            ('estimator', model)
-        ], memory=memory)
+        return wrap_with_pipeline(model, memory)
 
-    elif model_type == 'krr':
-        gamma = kwargs.pop('gamma', 0.1)
-        alpha = kwargs.pop('alpha', 1.0)
+    elif model_type == "krr":
+        gamma = kwargs.pop("gamma", 0.1)
+        alpha = kwargs.pop("alpha", 1.0)
         nystroem_kwargs = {
-            'kernel': 'rbf', 'gamma': gamma, 'random_state': 0
+            k: kwargs.pop(k) for k in ("n_components", "degree", "coef0") if k in kwargs
         }
-        for key in {'n_components', 'degree', 'coef0'}:
-            if key in kwargs:
-                nystroem_kwargs[key] = kwargs.pop(key)
-        ridge_kwargs = {'alpha': alpha, 'random_state': 0}
-        return Pipeline([
-            ('scaler', MinMaxScaler()),
-            ('feature_map', Nystroem(**nystroem_kwargs)),
-            ('ridge', Ridge(**ridge_kwargs))
-        ], memory=memory)
+        nystroem_kwargs.update({"kernel": "rbf", "gamma": gamma, "random_state": 0})
+        ridge_kwargs = {"alpha": alpha, "random_state": 0}
+        return Pipeline(
+            [
+                ("scaler", MinMaxScaler()),
+                ("feature_map", Nystroem(**nystroem_kwargs)),
+                ("ridge", Ridge(**ridge_kwargs)),
+            ],
+            memory=memory,
+        )
 
-    elif model_type == 'xgb':
-        output_dim = kwargs.pop('output_dim', 1)
+    elif model_type == "xgb":
+        output_dim = kwargs.pop("output_dim", 1)
         base_model = XGBRegressor(**kwargs)
         model = MultiOutputRegressor(base_model) if output_dim >= 2 else base_model
-        return Pipeline([
-            ('scaler', MinMaxScaler()),
-            ('estimator', model)
-        ], memory=memory)
+        return wrap_with_pipeline(model, memory)
 
-    elif model_type == 'mlp':
-        input_dim = kwargs.pop('input_dim')
-        output_dim = kwargs.pop('output_dim')
-        hidden_layers = kwargs.pop('hidden_layers')
-        epochs = kwargs.pop('epochs', 200)
-        batch_size = kwargs.pop('batch_size', 32)
-        lr = kwargs.pop('lr', 1e-3)
-        
-        y_transform = FunctionTransformer(
-            func=lambda y: y.reshape(-1, 1) if y.ndim == 1 else y,
-            validate=False
-        )
+    elif model_type == "mlp":
+        set_seed(0)
+        mlp_params = {
+            "input_dim": kwargs.pop("input_dim"),
+            "output_dim": kwargs.pop("output_dim"),
+            "hidden_layers": kwargs.pop("hidden_layers"),
+        }
         model = MyNetRegressor(
             module=TorchMLP,
-            module__input_dim=input_dim,
-            module__output_dim=output_dim,
-            module__hidden_layers=hidden_layers,
+            module__input_dim=mlp_params["input_dim"],
+            module__output_dim=mlp_params["output_dim"],
+            module__hidden_layers=mlp_params["hidden_layers"],
             criterion=torch.nn.MSELoss,
             optimizer=torch.optim.Adam,
             verbose=0,
-            max_epochs=epochs,
-            batch_size=batch_size,
+            max_epochs=kwargs.pop("epochs", 200),
+            batch_size=kwargs.pop("batch_size", 32),
             train_split=None,
-            lr=lr,
-            device='cuda' if torch.cuda.is_available() else 'cpu',
-        )     
-        set_seed(0)
+            lr=kwargs.pop("lr", 1e-3),
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
         model.initialize()
-        init_all_weights(model.module_, generator=False, generator_seed=0)
-        return Pipeline([
-            ('scaler', MinMaxScaler()),
-            ('estimator', model)
-        ], memory=memory)
-        
+        init_all_weights(model.module_, use_generator=False, generator_seed=0)
+        return wrap_with_pipeline(model, memory)
+
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
-            
-          
 
-        
-if __name__ == '__main__':
-    import numpy as np
-    from sklearn.metrics import mean_squared_error
 
-    Q = 100   # Z in R^Q
-    P = 100   # X in R^P
-              # Y in R
+def evaluate_model(name: str, learner, X_train, Y_train):
+    Y_pred = learner.fit(X_train, Y_train).predict(X_train)
+    print(f"{name}: {mean_squared_error(Y_pred, Y_train):.4f}")
+
+
+if __name__ == "__main__":
     rng = np.random.default_rng(0)
-    Z = rng.standard_normal((100, Q))
-    mlp_generator_ZtoX = TorchMLP(
-        input_dim=P,
-        output_dim=Q,
-        hidden_layers=[32], 
-    )
+
+    ## 1-dim tests
+    Q, P = 1, 1
+    N = 100
+    Z = rng.standard_normal((N, Q))
+
+    mlp_generator_ZtoX = TorchMLP(input_dim=Q, output_dim=P, hidden_layers=[32])
     init_all_weights(mlp_generator_ZtoX)
     X = mlp_generator_ZtoX.predict_numpy(Z)
-    mlp_generator_XtoY = TorchMLP(
-        input_dim=Q,
-        output_dim=1,
-        hidden_layers=[32], 
-    )
+
+    mlp_generator_XtoY = TorchMLP(input_dim=P, output_dim=1, hidden_layers=[32])
     init_all_weights(mlp_generator_XtoY)
     Y = mlp_generator_XtoY.predict_numpy(X)
 
-    assert X.shape == ((100, P) if P != 1 else (100,))
-    assert Y.shape == (100,)
-    print(f'{Z.mean()=}')
-    print(f'{X.mean()=}')
-    print(f'{Y.mean()=}')
-    
-    ols_learner = build_learner(model_type='ols')
-    X_ols = ols_learner.fit(Z, X).predict(Z)
-    print(f'ols: {mean_squared_error(X_ols, X)}')
-    Y_ols = ols_learner.fit(X, Y).predict(X)
-#     print(Y_ols.shape)
-    print(f'ols: {mean_squared_error(Y_ols, Y)}')
+    assert X.shape == ((N, P) if P != 1 else (N,))
+    assert Y.shape == (N,)
+    print(f"Z.mean()={Z.mean():.3f}, X.mean()={X.mean():.3f}, Y.mean()={Y.mean():.3f}")
 
-    rf_learner1 = build_learner(
-        model_type='rf', 
-        output_dim=P, 
-        n_estimators=100, 
-        max_depth=10,
-        max_features='sqrt',
-        n_jobs=-1,
-    )
-    rf_learner2 = build_learner(model_type='rf', output_dim=1)
-    X_rf = rf_learner1.fit(Z, X).predict(Z)
-    print(f'rf: {mean_squared_error(X_rf, X)}')
-    Y_rf = rf_learner2.fit(X, Y).predict(X)
-    print(f'rf: {mean_squared_error(Y_rf, Y)}')
+    for name, model_args in [
+        ("ols_X", dict(model_type="ols")),
+        ("ols_Y", dict(model_type="ols")),
+        (
+            "rf_X",
+            dict(
+                model_type="rf",
+                output_dim=P,
+                n_estimators=100,
+                max_depth=10,
+                max_features="sqrt",
+                n_jobs=-1,
+            ),
+        ),
+        ("rf_Y", dict(model_type="rf", output_dim=1)),
+        ("krr_X", dict(model_type="krr")),
+        ("krr_Y", dict(model_type="krr")),
+        ("xgb_X", dict(model_type="xgb", output_dim=P)),
+        ("xgb_Y", dict(model_type="xgb", output_dim=1)),
+        (
+            "mlp_X",
+            dict(
+                model_type="mlp",
+                input_dim=Q,
+                output_dim=P,
+                hidden_layers=[64],
+                epochs=200,
+                batch_size=32,
+            ),
+        ),
+        (
+            "mlp_Y",
+            dict(
+                model_type="mlp",
+                input_dim=P,
+                output_dim=1,
+                hidden_layers=[64],
+                epochs=200,
+                batch_size=32,
+            ),
+        ),
+    ]:
+        learner = build_learner(**model_args)
+        if name.endswith("_X"):
+            evaluate_model(name, learner, Z, X)
+        else:
+            evaluate_model(name, learner, X.reshape(-1, 1), Y)
 
-    krr_learner = build_learner(model_type='krr')
-    X_krr = krr_learner.fit(Z, X).predict(Z)
-    print(f'krr: {mean_squared_error(X_krr, X)}')
-    Y_krr = krr_learner.fit(X, Y).predict(X)
-    print(f'krr: {mean_squared_error(Y_krr, Y)}')
+    ## multi-dim tests
+    Q, P = 20, 10
+    N = 100
+    Z = rng.standard_normal((N, Q))
 
-    xgb_learner1 = build_learner(model_type='xgb', output_dim=P)
-    xgb_learner2 = build_learner(model_type='xgb', output_dim=1)
-    X_xgb = xgb_learner1.fit(Z, X).predict(Z)
-    print(f'xgb: {mean_squared_error(X_xgb, X)}')
-    Y_xgb = xgb_learner2.fit(X, Y).predict(X)
-    print(f'xgb: {mean_squared_error(Y_xgb, Y)}')
+    mlp_generator_ZtoX = TorchMLP(input_dim=Q, output_dim=P, hidden_layers=[32])
+    init_all_weights(mlp_generator_ZtoX)
+    X = mlp_generator_ZtoX.predict_numpy(Z)
 
-    mlp_learner_ZtoX = build_learner(
-        model_type = 'mlp', 
-        input_dim = P, 
-        output_dim = Q, 
-        hidden_layers = [64],
-        epochs = 200,
-        batch_size=32,
-    )
-    mlp_learner_XtoY = build_learner(
-        model_type = 'mlp', 
-        input_dim = Q, 
-        output_dim = 1, 
-        hidden_layers = [64],
-        epochs = 200,
-        batch_size=32,
-    )
-    X_mlp = mlp_learner_ZtoX.fit(Z, X).predict(Z)
-#     print(X_mlp.shape)
-    print(f'mlp: {mean_squared_error(X_mlp, X)}')
-    Y_mlp = mlp_learner_XtoY.fit(X, Y).predict(X)
-#     print(Y_mlp.shape)
-    print(f'mlp: {mean_squared_error(Y_mlp, Y)}')
+    mlp_generator_XtoY = TorchMLP(input_dim=P, output_dim=1, hidden_layers=[32])
+    init_all_weights(mlp_generator_XtoY)
+    Y = mlp_generator_XtoY.predict_numpy(X)
 
-        
-        
-        
+    assert X.shape == ((N, P) if P != 1 else (N,))
+    assert Y.shape == (N,)
+    print(f"Z.mean()={Z.mean():.3f}, X.mean()={X.mean():.3f}, Y.mean()={Y.mean():.3f}")
+
+    for name, model_args in [
+        ("ols_X", dict(model_type="ols")),
+        ("ols_Y", dict(model_type="ols")),
+        (
+            "rf_X",
+            dict(
+                model_type="rf",
+                output_dim=P,
+                n_estimators=100,
+                max_depth=10,
+                max_features="sqrt",
+                n_jobs=-1,
+            ),
+        ),
+        ("rf_Y", dict(model_type="rf", output_dim=1)),
+        ("krr_X", dict(model_type="krr")),
+        ("krr_Y", dict(model_type="krr")),
+        ("xgb_X", dict(model_type="xgb", output_dim=P)),
+        ("xgb_Y", dict(model_type="xgb", output_dim=1)),
+        (
+            "mlp_X",
+            dict(
+                model_type="mlp",
+                input_dim=Q,
+                output_dim=P,
+                hidden_layers=[64],
+                epochs=200,
+                batch_size=32,
+            ),
+        ),
+        (
+            "mlp_Y",
+            dict(
+                model_type="mlp",
+                input_dim=P,
+                output_dim=1,
+                hidden_layers=[64],
+                epochs=200,
+                batch_size=32,
+            ),
+        ),
+    ]:
+        learner = build_learner(**model_args)
+        if name.endswith("_X"):
+            evaluate_model(name, learner, Z, X)
+        else:
+            evaluate_model(name, learner, X, Y)
