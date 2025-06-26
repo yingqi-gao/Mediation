@@ -1,1 +1,5 @@
+# Ignore the results folder
 results/
+
+# Ignore the results.zip file
+results.zip

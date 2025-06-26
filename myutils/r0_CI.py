@@ -26,8 +26,10 @@ def _construct_r0_CI(
 ) -> dict:
 
     Z, X, Y = real_data
+    N = X.shape[0]
     p = X.shape[1] if X.ndim > 1 else 1
     Zp = expanded_data
+    Np = Zp.shape[0]
 
     # Retrieve r_hat using the first cross-fitting result & make predictions
     X_hat = rhat.predict(Z)
@@ -61,7 +63,7 @@ def _construct_r0_CI(
         assert sigma2_2.shape == (p,)
     else:
         assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
-    z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p if p > 1 else 1))
+    z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
     w_theta = z_crit * np.sqrt(sigma2_1 + sigma2_2)
     if p > 1:
         assert w_theta.shape == (p,)
@@ -81,6 +83,7 @@ def _construct_r0_CI(
         "me": me,
         "mean_X_hatp": mean_X_hatp,
         "delta": delta,
+        "z_crit": z_crit, 
         "prediction error": np.mean(sigma2_1),
         "expanded error": np.mean(sigma2_2),
     }
@@ -136,6 +139,9 @@ def construct_r0_CIs(
     coverage = np.mean([ci["covers?"] for ci in r0_CIs])
     avg_me = np.mean([ci["me"] for ci in r0_CIs])
     print(f"Coverage: {coverage:.3f}\nAverage ME: {avg_me:.3f}")
+    # print(f"z_crit: {np.mean([ci['z_crit'] for ci in r0_CIs])}\n")
+    # print(f"average prediction error: {np.mean([ci['prediction error'] for ci in r0_CIs])}\n")
+    # print(f"average expanded error: {np.mean([ci['expanded error'] for ci in r0_CIs])}\n")
     return r0_CIs, coverage, avg_me
 
 
@@ -207,12 +213,13 @@ if __name__ == '__main__':
             expanded_data_param=expanded_data_param,
             model_directory_uri=model_directory_uri,
             rhat=rhat, 
-            r0=r0
+            r0=r0,
+            fresh=True,
         )
 
     ## ## multi-dim tests
     Q, P = 20, 10
-    N_TRAIN = 1000
+    N_TRAIN = 10000
     N_REAL = 100
     N_EXPANDED = 1000
     SEED = 999
@@ -272,4 +279,5 @@ if __name__ == '__main__':
             model_directory_uri=model_directory_uri,
             rhat=rhat,
             r0=r0,
+            fresh=True,
         )

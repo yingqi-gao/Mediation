@@ -53,7 +53,7 @@ def get_model_directory_uri(
         output_directory_uri,
         f"data_generator_param={get_dict_hash(data_generator_param_dict)}",
         f"train_data_param={get_dict_hash(train_data_param_dict)}",
-        f"r0_learner={r0_learner_name}"
+        f"r0_learner={r0_learner_name}",
         f"g0_learner={g0_learner_name}",
     )
 
@@ -75,8 +75,6 @@ def get_r0_CI_directory_uri(
 
 
 def read_pickle(uri):
-    import warnings
-    warnings.simplefilter("ignore", category=FutureWarning)
     with open(uri, 'rb') as file:
         return pickle.load(file)
 
