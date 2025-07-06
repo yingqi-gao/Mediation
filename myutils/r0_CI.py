@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import scipy
+from ppi_py import ppi_mean_ci
 
 from data_generator import (
     GeneratedData,
@@ -37,55 +38,57 @@ def _construct_r0_CI(
     X_hatp = rhat.predict(Zp)
     assert X_hatp.shape == (Zp.shape[0], p) if p > 1 else (Zp.shape[0], )
 
-    # Find the midpoint
-    mean_X_hatp = X_hatp.mean(axis=0)
-    if p > 1:
-        assert mean_X_hatp.shape == (p,)
-    else:
-        assert np.isscalar(mean_X_hatp) or mean_X_hatp.shape == ()
-    delta = (X_hat - X).mean(axis=0)
-    if p > 1:
-        assert delta.shape == (p,)
-    else:
-        assert np.isscalar(delta) or delta.shape == ()
-    midpoint = mean_X_hatp - delta 
-    #     print(f"{midpoint=}")
-    #     print(f"discrepancy from the midpoint: {np.mean(r0(Z0) - midpoint)}")
+    lower, upper = ppi_mean_ci(X, X_hat, X_hatp, alpha=alpha)
 
-    # Find the width
-    sigma2_1 = np.var(X_hat - X, axis=0, ddof=0)
-    if p > 1:
-        assert sigma2_1.shape == (p,)
-    else:
-        assert np.isscalar(sigma2_1) or sigma2_1.shape == ()
-    sigma2_2 = np.var(X_hatp, axis=0, ddof=0)
-    if p > 1:
-        assert sigma2_2.shape == (p,)
-    else:
-        assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
-    z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
-    w_theta = z_crit * np.sqrt(sigma2_1 + sigma2_2)
-    if p > 1:
-        assert w_theta.shape == (p,)
-    else:
-        assert np.isscalar(w_theta) or w_theta.shape == ()
-    me = np.mean(w_theta)
+    # # Find the midpoint
+    # mean_X_hatp = X_hatp.mean(axis=0)
+    # if p > 1:
+    #     assert mean_X_hatp.shape == (p,)
+    # else:
+    #     assert np.isscalar(mean_X_hatp) or mean_X_hatp.shape == ()
+    # delta = (X_hat - X).mean(axis=0)
+    # if p > 1:
+    #     assert delta.shape == (p,)
+    # else:
+    #     assert np.isscalar(delta) or delta.shape == ()
+    # midpoint = mean_X_hatp - delta
+    # #     print(f"{midpoint=}")
+    # #     print(f"discrepancy from the midpoint: {np.mean(r0(Z0) - midpoint)}")
 
-    # Find the endpoints
-    lower = midpoint - w_theta
-    upper = midpoint + w_theta
+    # # Find the width
+    # sigma2_1 = np.var(X_hat - X, axis=0, ddof=0)
+    # if p > 1:
+    #     assert sigma2_1.shape == (p,)
+    # else:
+    #     assert np.isscalar(sigma2_1) or sigma2_1.shape == ()
+    # sigma2_2 = np.var(X_hatp, axis=0, ddof=0)
+    # if p > 1:
+    #     assert sigma2_2.shape == (p,)
+    # else:
+    #     assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
+    # z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
+    # w_theta = z_crit * np.sqrt(sigma2_1 + sigma2_2)
+    # if p > 1:
+    #     assert w_theta.shape == (p,)
+    # else:
+    #     assert np.isscalar(w_theta) or w_theta.shape == ()
+    # me = np.mean(w_theta)
+
+    # # Find the endpoints
+    # lower = midpoint - w_theta
+    # upper = midpoint + w_theta
 
     # Construct the CI
     r0_CI = {
         "lower": lower,
         "upper": upper,
-        "covers?": (np.all(lower < r0(Z0))) and (np.all(r0(Z0) < upper)),
-        "me": me,
-        "mean_X_hatp": mean_X_hatp,
-        "delta": delta,
-        "z_crit": z_crit, 
-        "prediction error": np.mean(sigma2_1),
-        "expanded error": np.mean(sigma2_2),
+        "covers?": (lower < r0(Z0)) & (r0(Z0) < upper),
+        "me": np.mean((upper - lower) / 2),
+        # "mean_X_hatp": mean_X_hatp,
+        # "delta": delta,
+        # "z_crit": z_crit,
+        # "prediction error": np.mean(sigma2_1),
+        # "expanded error": np.mean(sigma2_2),
     }
 
     return r0_CI
@@ -154,9 +157,9 @@ if __name__ == '__main__':
 
     ## ## 1-dim tests
     Q, P = 1, 1
-    N_TRAIN = 100
-    N_REAL = 10
-    N_EXPANDED = 100
+    N_TRAIN = 1000
+    N_REAL = 100
+    N_EXPANDED = 1000
     SEED = 999
 
     r0, g0, f0 = generate_true_models(Q, P)
@@ -206,6 +209,7 @@ if __name__ == '__main__':
             learner_name=name,
             learner=learner,
             seed=SEED,
+            fresh=True,
         )
         construct_r0_CIs(
             data_generator_param=data_generator_param,
@@ -271,6 +275,7 @@ if __name__ == '__main__':
             learner_name=name,
             learner=learner,
             seed=SEED,
+            fresh=True,
         )
         construct_r0_CIs(
             data_generator_param=data_generator_param,

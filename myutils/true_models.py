@@ -34,25 +34,29 @@ class NNBias2:
 # === MAIN INTERFACES ===
 
 
-def generate_true_models(q, p):
-    TRUE_r0_MLP = TorchMLP(input_dim=q, output_dim=p, hidden_layers=[32, 32])
-    init_all_weights(TRUE_r0_MLP, generator_seed=9999)
+def generate_true_models(q, p, test=False):
+    if test:
+        def r0(Z):
+            W = np.full((q, p), 5.0)
+            result = Z @ W
+            return result.ravel() if result.shape[1] == 1 else result
+        def g0(Z):
+            return 10.0 * (np.sum(Z, axis=-1) if Z.ndim == 2 else Z)
+    else:
+        TRUE_r0_MLP = TorchMLP(input_dim=q, output_dim=p, hidden_layers=[32, 32])
+        init_all_weights(TRUE_r0_MLP, generator_seed=9999)
 
-    def r0(Z):
-        return TRUE_r0_MLP.predict_numpy(Z)
+        def r0(Z):
+            return TRUE_r0_MLP.predict_numpy(Z)
 
-    TRUE_g0_MLP = TorchMLP(input_dim=q, output_dim=1, hidden_layers=[64, 64, 64, 64])
-    init_all_weights(TRUE_g0_MLP, generator_seed=9999)
+        TRUE_g0_MLP = TorchMLP(input_dim=q, output_dim=1, hidden_layers=[64, 64, 64, 64])
+        init_all_weights(TRUE_g0_MLP, generator_seed=9999)
 
-    def g0(Z):
-        return TRUE_g0_MLP.predict_numpy(Z).squeeze()
+        def g0(Z):
+            return TRUE_g0_MLP.predict_numpy(Z).squeeze()
 
     def f0(X):
-        if X.ndim == 1:
-            return 2.0 * X
-        elif X.ndim == 2:
-            beta = np.full((X.shape[1], 1), 2.0)
-            return (X @ beta).ravel()
+        return 2.0 * (np.sum(X, axis=-1) if X.ndim == 2 else X)
 
     return TrueModels(r0, g0, f0)
 
