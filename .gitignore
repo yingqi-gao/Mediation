@@ -1,5 +1,1 @@
-# Ignore the results folder
-results/
-
-# Ignore the results.zip file
-results.zip
+git commit -m "Remove unnecessary binary files and update .gitignore"
