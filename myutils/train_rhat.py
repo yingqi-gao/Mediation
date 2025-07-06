@@ -4,7 +4,7 @@ from sklearn.base import clone
 from sklearn.metrics import mean_squared_error
 
 from data_generator import DataGenerator, DataGeneratorParam, TrainDataParam
-from utils import timeit, read_pickle, write_pickle
+from utils import timeit, read_file, write_file
 
 
 @timeit
@@ -28,14 +28,16 @@ def train_rhat(
 
     # Check if the model has already been trained and stored properly
     if os.path.exists(model_uri) and os.path.exists(model_metadata_uri) and not fresh:
-        rhat = read_pickle(model_uri)
+        print("Reading rhat...")
+        rhat = read_file(model_uri)
 
     # If not
     else:
+        print("Training rhat...")
         # Copy the learner, train and store the model
         r0_learner = clone(learner)
         rhat = r0_learner.fit(Z, X)
-        write_pickle(rhat, model_uri)
+        write_file(rhat, model_uri)
 
         # Gather and store the metadata
         model_metadata = {
@@ -44,7 +46,7 @@ def train_rhat(
             "r0_learner": learner_name,
             "g0_learner": None,
         }
-        write_pickle(model_metadata, model_metadata_uri)
+        write_file(model_metadata, model_metadata_uri)
 
     # Print the training MSE
     print(f"{learner_name} training MSE = {mean_squared_error(X, rhat.predict(Z))}")

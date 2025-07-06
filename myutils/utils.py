@@ -2,7 +2,7 @@ import functools
 import hashlib
 import json
 import os
-import pickle
+import joblib
 import random
 import time
 from typing import Optional
@@ -74,16 +74,14 @@ def get_r0_CI_directory_uri(
     )
 
 
-def read_pickle(uri):
-    with open(uri, 'rb') as file:
-        return pickle.load(file)
+def read_file(uri):
+    return joblib.load(uri)
 
-
-def write_pickle(data, uri):
+def write_file(data, uri):
     dir_uri = os.path.dirname(uri)
     os.makedirs(dir_uri, exist_ok=True)
-    with open(uri, "wb") as file:
-        pickle.dump(data, file)
+    print("Saving...")
+    joblib.dump(data, uri, compress=3)  # optional: adjust compress level if needed
 
 
 def set_seed(seed=0):

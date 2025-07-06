@@ -1,1 +1,11 @@
-git commit -m "Remove unnecessary binary files and update .gitignore"
+# macOS system files
+.DS_Store
+
+# Python cache
+myutils/__pycache__/*.pyc
+
+# Ignore the results folder
+results/
+
+# Ignore the results.zip file
+results.zip

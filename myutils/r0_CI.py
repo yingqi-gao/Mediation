@@ -13,7 +13,7 @@ from data_generator import (
     DataGenerator,
 )
 from train_rhat import train_rhat
-from utils import timeit, read_pickle, write_pickle, get_r0_CI_directory_uri
+from utils import timeit, read_file, write_file, get_r0_CI_directory_uri
 
 
 def _construct_r0_CI(
@@ -116,28 +116,31 @@ def construct_r0_CIs(
     results_uri = os.path.join(results_directory_uri, "r0_CIs.pkl")
 
     if os.path.exists(results_uri) and not fresh:
-        r0_CIs = read_pickle(results_uri)
+        print("Reading r0 CIs...")
+        r0_CIs = read_file(results_uri)
 
-    data_generator = DataGenerator(data_generator_param)
-    Z0 = data_generator.generate_target_point(real_data_param, seed=0).Z0
-    r0_CIs = []
+    else:
+        print("Constructing r0 CIs...")
+        data_generator = DataGenerator(data_generator_param)
+        Z0 = data_generator.generate_target_point(real_data_param, seed=0).Z0
+        r0_CIs = []
 
-    for i in range(repetitions):
-        real_data = data_generator.generate_real_data(real_data_param, seed=i)
-        expanded_data = data_generator.generate_expanded_data(
-            expanded_data_param, Z0, seed=i
-        )
-        r0_CIs.append(
-            _construct_r0_CI(
-                real_data = real_data,
-                Z0 = Z0,
-                expanded_data = expanded_data,
-                rhat = rhat, 
-                r0 = r0, 
-                alpha = alpha,
+        for i in range(repetitions):
+            real_data = data_generator.generate_real_data(real_data_param, seed=i)
+            expanded_data = data_generator.generate_expanded_data(
+                expanded_data_param, Z0, seed=i
             )
-        )
-    write_pickle(r0_CIs, results_uri)
+            r0_CIs.append(
+                _construct_r0_CI(
+                    real_data = real_data,
+                    Z0 = Z0,
+                    expanded_data = expanded_data,
+                    rhat = rhat, 
+                    r0 = r0, 
+                    alpha = alpha,
+                )
+            )
+        write_file(r0_CIs, results_uri)
 
     coverage = np.mean([ci["covers?"] for ci in r0_CIs])
     avg_me = np.mean([ci["me"] for ci in r0_CIs])
