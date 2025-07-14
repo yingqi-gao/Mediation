@@ -28,12 +28,12 @@ def train_rhat(
 
     # Check if the model has already been trained and stored properly
     if os.path.exists(model_uri) and os.path.exists(model_metadata_uri) and not fresh:
-        print("Reading rhat...")
+        print("Reading rhat...\n")
         rhat = read_file(model_uri)
 
     # If not
     else:
-        print("Training rhat...")
+        print("Training rhat...\n")
         # Copy the learner, train and store the model
         r0_learner = clone(learner)
         rhat = r0_learner.fit(Z, X)

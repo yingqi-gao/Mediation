@@ -32,7 +32,7 @@ class RealDataParam(DataParam):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["bias_func"] = str(data["bias_func"])
+        data["bias_func"] = data["bias_func"].__class__.__name__
         return data
 
     @classmethod

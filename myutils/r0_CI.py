@@ -38,45 +38,45 @@ def _construct_r0_CI(
     X_hatp = rhat.predict(Zp)
     assert X_hatp.shape == (Zp.shape[0], p) if p > 1 else (Zp.shape[0], )
 
-    lower, upper = ppi_mean_ci(X, X_hat, X_hatp, alpha=alpha)
+    # lower, upper = ppi_mean_ci(X, X_hat, X_hatp, alpha=alpha, lam=1)
 
-    # # Find the midpoint
-    # mean_X_hatp = X_hatp.mean(axis=0)
-    # if p > 1:
-    #     assert mean_X_hatp.shape == (p,)
-    # else:
-    #     assert np.isscalar(mean_X_hatp) or mean_X_hatp.shape == ()
-    # delta = (X_hat - X).mean(axis=0)
-    # if p > 1:
-    #     assert delta.shape == (p,)
-    # else:
-    #     assert np.isscalar(delta) or delta.shape == ()
-    # midpoint = mean_X_hatp - delta
-    # #     print(f"{midpoint=}")
-    # #     print(f"discrepancy from the midpoint: {np.mean(r0(Z0) - midpoint)}")
+    # Find the midpoint
+    mean_X_hatp = X_hatp.mean(axis=0)
+    if p > 1:
+        assert mean_X_hatp.shape == (p,)
+    else:
+        assert np.isscalar(mean_X_hatp) or mean_X_hatp.shape == ()
+    delta = (X_hat - X).mean(axis=0)
+    if p > 1:
+        assert delta.shape == (p,)
+    else:
+        assert np.isscalar(delta) or delta.shape == ()
+    midpoint = mean_X_hatp - delta
+    #     print(f"{midpoint=}")
+    #     print(f"discrepancy from the midpoint: {np.mean(r0(Z0) - midpoint)}")
 
-    # # Find the width
-    # sigma2_1 = np.var(X_hat - X, axis=0, ddof=0)
-    # if p > 1:
-    #     assert sigma2_1.shape == (p,)
-    # else:
-    #     assert np.isscalar(sigma2_1) or sigma2_1.shape == ()
-    # sigma2_2 = np.var(X_hatp, axis=0, ddof=0)
-    # if p > 1:
-    #     assert sigma2_2.shape == (p,)
-    # else:
-    #     assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
-    # z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
-    # w_theta = z_crit * np.sqrt(sigma2_1 + sigma2_2)
-    # if p > 1:
-    #     assert w_theta.shape == (p,)
-    # else:
-    #     assert np.isscalar(w_theta) or w_theta.shape == ()
-    # me = np.mean(w_theta)
+    # Find the width
+    sigma2_1 = np.var(X_hat - X, axis=0, ddof=0)
+    if p > 1:
+        assert sigma2_1.shape == (p,)
+    else:
+        assert np.isscalar(sigma2_1) or sigma2_1.shape == ()
+    sigma2_2 = np.var(X_hatp, axis=0, ddof=0)
+    if p > 1:
+        assert sigma2_2.shape == (p,)
+    else:
+        assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
+    z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
+    w_theta = z_crit * np.sqrt(sigma2_1 / N + sigma2_2 / Np)
+    if p > 1:
+        assert w_theta.shape == (p,)
+    else:
+        assert np.isscalar(w_theta) or w_theta.shape == ()
+    me = np.mean(w_theta)
 
-    # # Find the endpoints
-    # lower = midpoint - w_theta
-    # upper = midpoint + w_theta
+    # Find the endpoints
+    lower = midpoint - w_theta
+    upper = midpoint + w_theta
 
     # Construct the CI
     r0_CI = {
@@ -116,11 +116,11 @@ def construct_r0_CIs(
     results_uri = os.path.join(results_directory_uri, "r0_CIs.pkl")
 
     if os.path.exists(results_uri) and not fresh:
-        print("Reading r0 CIs...")
+        print("Reading r0 CIs...\n")
         r0_CIs = read_file(results_uri)
 
     else:
-        print("Constructing r0 CIs...")
+        print("Constructing r0 CIs...\n")
         data_generator = DataGenerator(data_generator_param)
         Z0 = data_generator.generate_target_point(real_data_param, seed=0).Z0
         r0_CIs = []
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     N_EXPANDED = 1000
     SEED = 999
 
-    r0, g0, f0 = generate_true_models(Q, P)
+    r0, g0, f0 = generate_true_models(Q, P, test=True)
     nn_bias_1, nn_bias_2 = generate_bias_models(Q, P)
 
     data_generator_param = DataGeneratorParam(p=P, q=Q, r0=r0, g0=g0, f0=f0)
@@ -184,7 +184,6 @@ if __name__ == '__main__':
             output_dim=P,
             n_estimators=100,
             max_features="sqrt",
-            n_jobs=-1,
         ),
         "kernel": build_learner(model_type="krr"),
         "xgboost": build_learner(model_type="xgb", output_dim=P),
@@ -212,7 +211,7 @@ if __name__ == '__main__':
             learner_name=name,
             learner=learner,
             seed=SEED,
-            fresh=True,
+            # fresh=True,
         )
         construct_r0_CIs(
             data_generator_param=data_generator_param,
@@ -221,7 +220,7 @@ if __name__ == '__main__':
             model_directory_uri=model_directory_uri,
             rhat=rhat, 
             r0=r0,
-            fresh=True,
+            # fresh=True,
         )
 
     ## ## multi-dim tests
@@ -231,7 +230,7 @@ if __name__ == '__main__':
     N_EXPANDED = 1000
     SEED = 999
 
-    r0, g0, f0 = generate_true_models(Q, P)
+    r0, g0, f0 = generate_true_models(Q, P, test=True)
     nn_bias_1, nn_bias_2 = generate_bias_models(Q, P)
 
     data_generator_param = DataGeneratorParam(p=P, q=Q, r0=r0, g0=g0, f0=f0)
@@ -250,7 +249,6 @@ if __name__ == '__main__':
             output_dim=P,
             n_estimators=100,
             max_features="sqrt",
-            n_jobs=-1,
         ),
         "kernel": build_learner(model_type="krr"),
         "xgboost": build_learner(model_type="xgb", output_dim=P),
@@ -278,7 +276,7 @@ if __name__ == '__main__':
             learner_name=name,
             learner=learner,
             seed=SEED,
-            fresh=True,
+            # fresh=True,
         )
         construct_r0_CIs(
             data_generator_param=data_generator_param,
@@ -287,5 +285,5 @@ if __name__ == '__main__':
             model_directory_uri=model_directory_uri,
             rhat=rhat,
             r0=r0,
-            fresh=True,
+            # fresh=True,
         )
