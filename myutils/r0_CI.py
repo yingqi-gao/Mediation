@@ -1,8 +1,8 @@
 import os
+from typing import List, Tuple
 
 import numpy as np
 import scipy
-from ppi_py import ppi_mean_ci
 
 from data_generator import (
     GeneratedData,
@@ -21,7 +21,7 @@ def _construct_r0_CI(
     *,
     real_data: GeneratedData,
     target_point: TargetPoint,
-    expanded_data: GeneratedData,
+    expanded_data: np.ndarray,
     rhat,
     alpha=0.05,
 ) -> dict:
@@ -41,12 +41,12 @@ def _construct_r0_CI(
     # lower, upper = ppi_mean_ci(X, X_hat, X_hatp, alpha=alpha, lam=1)
 
     # Find the midpoint
-    mean_X_hatp = X_hatp.mean(axis=0)
+    mean_X_hatp = np.mean(X_hatp, axis=0)
     if p > 1:
         assert mean_X_hatp.shape == (p,)
     else:
         assert np.isscalar(mean_X_hatp) or mean_X_hatp.shape == ()
-    delta = (X_hat - X).mean(axis=0)
+    delta = np.mean(X_hat - X, axis=0)
     if p > 1:
         assert delta.shape == (p,)
     else:
@@ -66,7 +66,7 @@ def _construct_r0_CI(
         assert sigma2_2.shape == (p,)
     else:
         assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
-    z_crit = scipy.stats.norm.ppf(1 - alpha / 2)
+    z_crit = scipy.stats.norm.ppf(1 - alpha / 2) # type: ignore
     w_theta = z_crit * np.sqrt(2 * sigma2_1 / N + 2 * sigma2_2 / Np)
     if p > 1:
         assert w_theta.shape == (p,)
@@ -105,7 +105,7 @@ def construct_r0_CIs(
     alpha = 0.05,
     repetitions = 500,
     fresh = False
-) -> dict:
+) -> Tuple[List[dict], float, float]:
 
     results_directory_uri = get_r0_CI_directory_uri(
         real_data_param=real_data_param,
@@ -146,7 +146,7 @@ def construct_r0_CIs(
     print(f"z_crit: {np.mean([ci['z_crit'] for ci in r0_CIs])}\n")
     print(f"average prediction error: {np.mean([ci['prediction error'] for ci in r0_CIs])}\n")
     print(f"average expanded error: {np.mean([ci['expanded error'] for ci in r0_CIs])}\n")
-    return r0_CIs, coverage, avg_me
+    return r0_CIs, float(coverage), float(avg_me)
 
 
 if __name__ == '__main__':
@@ -159,8 +159,8 @@ if __name__ == '__main__':
     ## ## 1-dim tests
     Q, P = 1, 1
     N_TRAIN = 10000
-    N_REAL = 100
-    N_EXPANDED = 1000
+    N_REAL = 10
+    N_EXPANDED = 100
     SEED = 999
 
     r0, g0, f0 = generate_true_models(Q, P, test=True)
@@ -223,8 +223,8 @@ if __name__ == '__main__':
     ## ## multi-dim tests
     Q, P = 20, 10
     N_TRAIN = 10000
-    N_REAL = 100
-    N_EXPANDED = 1000
+    N_REAL = 10
+    N_EXPANDED = 100
     SEED = 999
 
     r0, g0, f0 = generate_true_models(Q, P, test=True)
