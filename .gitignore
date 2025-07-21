@@ -9,3 +9,6 @@ results/
 
 # Ignore the results.zip file
 results.zip
+
+# Ignore the Jupyter Notebook for scratch
+scratch.ipynb 

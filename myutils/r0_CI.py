@@ -6,6 +6,7 @@ from ppi_py import ppi_mean_ci
 
 from data_generator import (
     GeneratedData,
+    TargetPoint,
     DataGeneratorParam,
     TrainDataParam,
     RealDataParam,
@@ -19,10 +20,9 @@ from utils import timeit, read_file, write_file, get_r0_CI_directory_uri
 def _construct_r0_CI(
     *,
     real_data: GeneratedData,
-    Z0: np.ndarray,
-    expanded_data: np.ndarray,
+    target_point: TargetPoint,
+    expanded_data: GeneratedData,
     rhat,
-    r0,
     alpha=0.05,
 ) -> dict:
 
@@ -66,8 +66,8 @@ def _construct_r0_CI(
         assert sigma2_2.shape == (p,)
     else:
         assert np.isscalar(sigma2_2) or sigma2_2.shape == ()
-    z_crit = scipy.stats.norm.ppf(1 - alpha / (2 * p))
-    w_theta = z_crit * np.sqrt(sigma2_1 / N + sigma2_2 / Np)
+    z_crit = scipy.stats.norm.ppf(1 - alpha / 2)
+    w_theta = z_crit * np.sqrt(2 * sigma2_1 / N + 2 * sigma2_2 / Np)
     if p > 1:
         assert w_theta.shape == (p,)
     else:
@@ -82,13 +82,13 @@ def _construct_r0_CI(
     r0_CI = {
         "lower": lower,
         "upper": upper,
-        "covers?": (lower < r0(Z0)) & (r0(Z0) < upper),
+        "covers?": (lower <= target_point.X0) & (target_point.X0 <= upper),
         "me": np.mean((upper - lower) / 2),
-        # "mean_X_hatp": mean_X_hatp,
-        # "delta": delta,
-        # "z_crit": z_crit,
-        # "prediction error": np.mean(sigma2_1),
-        # "expanded error": np.mean(sigma2_2),
+        "mean_X_hatp": mean_X_hatp,
+        "delta": delta,
+        "z_crit": z_crit,
+        "prediction error": np.mean(sigma2_1),
+        "expanded error": np.mean(sigma2_2),
     }
 
     return r0_CI
@@ -102,7 +102,6 @@ def construct_r0_CIs(
     expanded_data_param: ExpandedDataParam,
     model_directory_uri: str,
     rhat, 
-    r0,
     alpha = 0.05,
     repetitions = 500,
     fresh = False
@@ -122,21 +121,20 @@ def construct_r0_CIs(
     else:
         print("Constructing r0 CIs...\n")
         data_generator = DataGenerator(data_generator_param)
-        Z0 = data_generator.generate_target_point(real_data_param, seed=0).Z0
+        target_point = data_generator.generate_target_point(real_data_param, seed=0)
         r0_CIs = []
 
         for i in range(repetitions):
             real_data = data_generator.generate_real_data(real_data_param, seed=i)
             expanded_data = data_generator.generate_expanded_data(
-                expanded_data_param, Z0, seed=i
+                expanded_data_param, target_point.Z0, seed=i
             )
             r0_CIs.append(
                 _construct_r0_CI(
                     real_data = real_data,
-                    Z0 = Z0,
+                    target_point = target_point,
                     expanded_data = expanded_data,
                     rhat = rhat, 
-                    r0 = r0, 
                     alpha = alpha,
                 )
             )
@@ -145,9 +143,9 @@ def construct_r0_CIs(
     coverage = np.mean([ci["covers?"] for ci in r0_CIs])
     avg_me = np.mean([ci["me"] for ci in r0_CIs])
     print(f"Coverage: {coverage:.3f}\nAverage ME: {avg_me:.3f}")
-    # print(f"z_crit: {np.mean([ci['z_crit'] for ci in r0_CIs])}\n")
-    # print(f"average prediction error: {np.mean([ci['prediction error'] for ci in r0_CIs])}\n")
-    # print(f"average expanded error: {np.mean([ci['expanded error'] for ci in r0_CIs])}\n")
+    print(f"z_crit: {np.mean([ci['z_crit'] for ci in r0_CIs])}\n")
+    print(f"average prediction error: {np.mean([ci['prediction error'] for ci in r0_CIs])}\n")
+    print(f"average expanded error: {np.mean([ci['expanded error'] for ci in r0_CIs])}\n")
     return r0_CIs, coverage, avg_me
 
 
@@ -160,7 +158,7 @@ if __name__ == '__main__':
 
     ## ## 1-dim tests
     Q, P = 1, 1
-    N_TRAIN = 1000
+    N_TRAIN = 10000
     N_REAL = 100
     N_EXPANDED = 1000
     SEED = 999
@@ -171,7 +169,7 @@ if __name__ == '__main__':
     data_generator_param = DataGeneratorParam(p=P, q=Q, r0=r0, g0=g0, f0=f0)
     train_data_param = TrainDataParam(n_train=N_TRAIN)
     real_data_param = RealDataParam(bias_func=nn_bias_1, bias_scale=0, n_real=N_REAL)
-    expanded_data_param = ExpandedDataParam(N_EXPANDED, 0.1)
+    expanded_data_param = ExpandedDataParam(N_EXPANDED, 1)
 
     OUTPUT_DIRECTORY_URI = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), "results"
@@ -219,8 +217,7 @@ if __name__ == '__main__':
             expanded_data_param=expanded_data_param,
             model_directory_uri=model_directory_uri,
             rhat=rhat, 
-            r0=r0,
-            # fresh=True,
+            fresh=True,
         )
 
     ## ## multi-dim tests
@@ -236,7 +233,7 @@ if __name__ == '__main__':
     data_generator_param = DataGeneratorParam(p=P, q=Q, r0=r0, g0=g0, f0=f0)
     train_data_param = TrainDataParam(n_train=N_TRAIN)
     real_data_param = RealDataParam(bias_func=nn_bias_1, bias_scale=0, n_real=N_REAL)
-    expanded_data_param = ExpandedDataParam(N_EXPANDED, 0.1)
+    expanded_data_param = ExpandedDataParam(N_EXPANDED, 1)
 
     OUTPUT_DIRECTORY_URI = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), "results"
@@ -284,6 +281,5 @@ if __name__ == '__main__':
             expanded_data_param=expanded_data_param,
             model_directory_uri=model_directory_uri,
             rhat=rhat,
-            r0=r0,
-            # fresh=True,
+            fresh=True,
         )
